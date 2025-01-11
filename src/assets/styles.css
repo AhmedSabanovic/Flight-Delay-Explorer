@@ -1,0 +1,87 @@
+h1 {
+    text-align: left;
+    color: #333;
+    margin: 20px 0;
+    font-family: Arial, sans-serif;
+}
+
+#map-container {
+    position: relative;
+}
+
+.zoom-controls {
+    position: absolute;
+    top: 20px;
+    left: 20px;  
+    background: white;
+    padding: 10px;
+    border-radius: 8px;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.zoom-controls button {
+    width: 36px;
+    height: 36px;
+    border: 1px solid #ddd;
+    background: white;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+}
+
+.zoom-controls button:hover {
+    background: #f5f5f5;
+    border-color: #999;
+}
+
+.zoom-controls #reset {
+    width: 36px;
+    font-size: 14px;
+}
+
+.airports circle {
+    fill: red;
+    stroke: none;
+    transition: r 0.3s;
+}
+
+.aggregated-marker {
+    fill: #ff4444;
+    stroke: white;
+    stroke-width: 1px;
+}
+
+.ocean {
+    fill: #00a0e5;
+    opacity: 0.8;
+}
+
+.states path {
+    fill: #f0f0f0;
+    stroke: #fff;
+    stroke-width: 0.5px;
+}
+
+.state-borders {
+    fill: none;
+    stroke: #fff;
+    stroke-width: 1px;
+}
+
+.nation-borders {
+    fill: none;
+    stroke: #000;
+    stroke-width: 1.5px;
+}
+
+.airports circle {
+    fill: red;
+    stroke: none;
+}

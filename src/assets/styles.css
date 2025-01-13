@@ -1,3 +1,25 @@
+/* General Styles */
+body {
+    margin: 0;
+    font-family: Arial, sans-serif;
+}
+
+#map-container {
+    position: relative;
+}
+.clusters circle.cluster {
+    fill: rgba(0, 128, 255, 0.6);
+    stroke: #fff;
+    stroke-width: 1px;
+    cursor: pointer;
+    transition: r 0.3s, fill 0.3s, stroke-width 0.3s;
+}
+
+.clusters circle.cluster:hover {
+    fill: rgba(0, 128, 255, 0.8);
+    stroke-width: 2px;
+}
+/* General Styles */
 h1 {
     text-align: left;
     color: #333;
@@ -5,10 +27,7 @@ h1 {
     font-family: Arial, sans-serif;
 }
 
-#map-container {
-    position: relative;
-}
-
+/* Zoom Controls */
 .zoom-controls {
     position: absolute;
     top: 20px;
@@ -46,42 +65,135 @@ h1 {
     font-size: 14px;
 }
 
-.airports circle {
-    fill: red;
-    stroke: none;
-    transition: r 0.3s;
+.connections path.connection {
+    stroke: orange;
+    stroke-width: 2px;
+    opacity: 0.8;
+    transition: stroke-width 0.3s, opacity 0.3s;
 }
 
+.connections path.connection:hover {
+    stroke-width: 3px;
+    opacity: 1;
+}
+
+.tooltip {
+    position: absolute;
+    text-align: left;
+    width: auto;
+    padding: 8px;
+    font: 12px sans-serif;
+    background: rgba(255, 255, 255, 0.9);
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    pointer-events: none;
+    box-shadow: 0px 0px 2px 0px #a6a6a6;
+} 
+
+/* Legend */
+.legend {
+    font-family: Arial, sans-serif;
+    font-size: 12px;
+}
+
+.legend .legend-title {
+    font-weight: bold;
+    fill: #333;
+}
+
+.airports circle {
+    stroke: white; 
+    stroke-width: 0.5px;
+    transition: r 0.3s, fill 0.3s, stroke-width 0.3s;
+    pointer-events: all; 
+}
+
+.airports circle:hover {
+    stroke-width: 1.5px;
+    cursor: pointer;
+    opacity: 1;
+    fill: #FFD700; /* Highlight color on hover */
+}
+
+
+/* Aggregated Markers */
 .aggregated-marker {
     fill: #ff4444;
     stroke: white;
     stroke-width: 1px;
 }
 
+/* Ocean Background */
 .ocean {
     fill: #00a0e5;
     opacity: 0.8;
 }
 
+/* States */
 .states path {
-    fill: #f0f0f0;
+    fill: white;
     stroke: #fff;
     stroke-width: 0.5px;
 }
 
+/* State Borders */
 .state-borders {
     fill: none;
-    stroke: #fff;
+    stroke: black;
     stroke-width: 1px;
 }
-
-.nation-borders {
-    fill: none;
-    stroke: #000;
-    stroke-width: 1.5px;
+.filter-panel {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    background: white;
+    padding: 10px;
+    border-radius: 8px;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+    z-index: 10; /* Ensure the filter panel is on top */
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
 }
 
-.airports circle {
-    fill: red;
-    stroke: none;
+.filter-panel h2 {
+    margin: 0 0 10px 0;
+    font-size: 16px;
+    color: #333;
+}
+
+.filter-panel label {
+    font-size: 14px;
+    color: #333;
+}
+
+.filter-panel input {
+    padding: 5px;
+    font-size: 14px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+}
+
+.filter-panel button {
+    padding: 8px;
+    font-size: 14px;
+    border: 1px solid #ddd;
+    background: white;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.filter-panel button:hover {
+    background: #f5f5f5;
+    border-color: #999;
+}
+
+.page-title {
+    position: relative;
+    text-align: center;
+    margin: 20px 0;
+    font-size: 24px; /* Make the title bigger */
+    font-weight: bold;
+    color: #333;
 }

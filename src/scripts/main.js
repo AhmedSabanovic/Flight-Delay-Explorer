@@ -1,28 +1,36 @@
-/**
- * This version adjusts the clustering behavior so that when the zoom level reaches 6, it fully displays everything.
- * It also adds filter options for pct_delayed and number of connections.
- */
-
 Promise.all([
-    d3.json("data/us-atlas.json"),
-    d3.csv("data/flightss_2019.csv")
-]).then(function([us, airports]) {
-    // Parse airport data
-    airports.forEach(function(d) {
-        d.LATITUDE = +d.LATITUDE;
-        d.LONGITUDE = +d.LONGITUDE;
-        d.DELAY_PERCENTAGE = +d.DELAY_PERCENTAGE;
-        d.pct_delayed = +d.pct_delayed; // Ensure pct_delayed is parsed as a number
+    d3.json("data/us-atlas.json")
+]).then(function([us]) {
+    let currentYear = 2020; 
+    let airports = [];
 
-        // Parse connections from string to array
-        const connectionsStr = d.connections.replace(/'/g, '"').replace(/^"|"$/g, '');
-        try {
-            d.connections = JSON.parse(connectionsStr);
-        } catch (e) {
-            console.error(`Error parsing connections for airport ${d.ORIGIN}:`, e);
-            d.connections = [];
-        }
+    // Initial load of data based on currentYear
+    loadData(currentYear).then(() => {
+        initializeVisualization();
     });
+
+    // Function to load data based on year
+    function loadData(year) {
+        return d3.csv(`data/flights_${year}.csv`).then(function(data) {
+            airports = data.map(d => {
+                d.LATITUDE = +d.LATITUDE;
+                d.LONGITUDE = +d.LONGITUDE;
+                d.DELAY_PERCENTAGE = +d.DELAY_PERCENTAGE;
+                d.pct_delayed = +d.pct_delayed;
+
+                const connectionsStr = d.connections.replace(/'/g, '"').replace(/^"|"$/g, '');
+                try {
+                    d.connections = JSON.parse(connectionsStr);
+                } catch (e) {
+                    console.error(`Error parsing connections for airport ${d.ORIGIN}:`, e);
+                    d.connections = [];
+                }
+                return d;
+            });
+        }).catch(error => {
+            console.error(`Error loading data for year ${year}:`, error);
+        });
+    }
 
     const width = 960;
     const height = 600;
@@ -40,9 +48,8 @@ Promise.all([
 
     const path = d3.geoPath().projection(projection);
 
-    // Define linear color scale based on pct_delayed
     const colorScale = d3.scaleLinear()
-        .domain([0, 45]) // 0% delayed -> blue, 100% delayed -> red
+        .domain([0, 45])
         .range(["blue", "red"]);
 
     const svg = d3.select("svg")
@@ -52,13 +59,11 @@ Promise.all([
 
     const g = svg.append("g");
 
-    // Ocean background
     g.append("rect")
         .attr("class", "ocean")
         .attr("width", width)
         .attr("height", height);
 
-    // Draw states
     g.append("g")
         .attr("class", "states")
         .selectAll("path")
@@ -66,21 +71,17 @@ Promise.all([
         .enter().append("path")
         .attr("d", path);
 
-    // State borders
     g.append("path")
         .attr("class", "state-borders")
         .attr("d", path(topojson.mesh(us, us.objects.states, (a, b) => a !== b)));
 
-    // Groups for connections and airports
     const connectionsGroup = g.append("g").attr("class", "connections");
     const airportsGroup = g.append("g").attr("class", "airports");
 
-    // Tooltip
     const tooltip = d3.select("body").append("div")
         .attr("class", "tooltip")
         .style("opacity", 0);
 
-    // Legend
     const legendWidth = 300, legendHeight = 10;
     const legendSvg = svg.append("g")
         .attr("class", "legend")
@@ -118,8 +119,6 @@ Promise.all([
 
     let debounceTimeout;
 
-    // Simple clustering function
-    // Clusters airports together if they lie within clusterRadius pixels of each other
     function clusterAirports(data, clusterRadius) {
         const clusters = [];
 
@@ -128,7 +127,6 @@ Promise.all([
             if (!coords) return;
             let foundCluster = null;
 
-            // Check if this airport is near an existing cluster
             for (const c of clusters) {
                 const dx = coords[0] - c.x;
                 const dy = coords[1] - c.y;
@@ -138,15 +136,12 @@ Promise.all([
                 }
             }
 
-            // If found a cluster, merge
             if (foundCluster) {
                 foundCluster.airports.push(airport);
                 foundCluster.count++;
-                // Update centroid in pixel space
                 foundCluster.x = (foundCluster.x * (foundCluster.count - 1) + coords[0]) / foundCluster.count;
                 foundCluster.y = (foundCluster.y * (foundCluster.count - 1) + coords[1]) / foundCluster.count;
             } else {
-                // Create a new cluster
                 clusters.push({
                     x: coords[0],
                     y: coords[1],
@@ -156,21 +151,18 @@ Promise.all([
             }
         });
 
-        // Compute aggregated metrics for each cluster (e.g., avg pct_delayed)
-        // Use final pixel coords as cluster center
         return clusters.map(c => {
             const avgPctDelayed = d3.mean(c.airports, d => d.pct_delayed);
             return {
                 x: c.x,
                 y: c.y,
-                airports: c.airports, // might hold multiple
+                airports: c.airports,
                 count: c.count,
                 pct_delayed: avgPctDelayed
             };
         });
     }
 
-    // Debounced zoom
     function zoomed(event) {
         clearTimeout(debounceTimeout);
         debounceTimeout = setTimeout(() => {
@@ -182,18 +174,14 @@ Promise.all([
         }, 100);
     }
 
-    // Update (render) airports with clustering and filtering
     function updateAirports() {
-        // Filter out invalid coords and apply filters
         const validAirports = airports.filter(d => {
             const coords = projection([d.LONGITUDE, d.LATITUDE]);
             return coords !== null && d.pct_delayed >= minPctDelayed && d.connections.length >= minConnections;
         });
 
-        // Determine cluster radius based on zoom level
-        const clusterRadius = currentZoom >= 6 ? 0 : 40 / currentZoom; // No clustering at zoom level 6 and above
+        const clusterRadius = currentZoom >= 6 ? 0 : 40 / currentZoom;
 
-        // Cluster the valid airports if clusterRadius > 0
         const clusters = clusterRadius > 0 ? clusterAirports(validAirports, clusterRadius) : validAirports.map(d => ({
             x: projection([d.LONGITUDE, d.LATITUDE])[0],
             y: projection([d.LONGITUDE, d.LATITUDE])[1],
@@ -202,18 +190,15 @@ Promise.all([
             pct_delayed: d.pct_delayed
         }));
 
-        // Data join with clusters instead of individual airports
         const clusterMarkers = airportsGroup.selectAll("circle")
-            .data(clusters, d => d.x + "_" + d.y); // key by location
+            .data(clusters, d => d.x + "_" + d.y);
 
-        // Exit old markers
         clusterMarkers.exit()
             .transition()
             .duration(300)
             .attr("r", 0)
             .remove();
 
-        // Enter new markers
         const markersEnter = clusterMarkers.enter()
             .append("circle")
             .attr("class", "airport")
@@ -237,22 +222,18 @@ Promise.all([
                 tooltip.transition().duration(500).style("opacity", 0);
             })
             .on("click", function(event, d) {
-                // If it's a cluster of more than one airport, log them
                 if (d.count > 1) {
                     console.log(`Clicked on cluster with ${d.count} airports:`, d.airports.map(a => a.ORIGIN));
                 } else {
                     console.log(`Clicked on single airport: ${d.airports[0].ORIGIN}`);
-                    // Toggle connections only if it's a single airport cluster
                     toggleConnections(d.airports[0]);
                 }
             });
 
-        // Transition for entering markers
         markersEnter.transition()
             .duration(500)
-            .attr("r", d => Math.max(3 / currentZoom, 3 + (d.count - 1)) ); // grow with cluster size
+            .attr("r", d => Math.max(3 / currentZoom, 3 + (d.count - 1)) );
 
-        // Update merged markers
         clusterMarkers.merge(markersEnter)
             .transition()
             .duration(300)
@@ -262,7 +243,6 @@ Promise.all([
             .attr("fill", d => colorScale(d.pct_delayed));
     }
 
-    // Toggle connections for a single airport
     function toggleConnections(selectedAirport) {
         console.log(`Toggling connections for airport: ${selectedAirport.ORIGIN}`);
         console.log(`Connections: ${selectedAirport.connections}`);
@@ -311,32 +291,41 @@ Promise.all([
         });
     }
 
-    // Initialize
-    updateAirports();
-
-    // Zoom controls
-    d3.select("#zoom-in").on("click", () => {
-        svg.transition()
-            .duration(750)
-            .call(zoom.scaleBy, 2);
-    });
-    d3.select("#zoom-out").on("click", () => {
-        svg.transition()
-            .duration(750)
-            .call(zoom.scaleBy, 0.5);
-    });
-    d3.select("#reset").on("click", () => {
-        svg.transition()
-            .duration(750)
-            .call(zoom.transform, d3.zoomIdentity);
-    });
-
-    // Filter controls
-    d3.select("#apply-filters").on("click", () => {
-        minPctDelayed = +d3.select("#pct-delayed").property("value");
-        minConnections = +d3.select("#num-connections").property("value");
+    function initializeVisualization() {
         updateAirports();
-    });
+
+        // Zoom controls
+        d3.select("#zoom-in").on("click", () => {
+            svg.transition()
+                .duration(750)
+                .call(zoom.scaleBy, 2);
+        });
+        d3.select("#zoom-out").on("click", () => {
+            svg.transition()
+                .duration(750)
+                .call(zoom.scaleBy, 0.5);
+        });
+        d3.select("#reset").on("click", () => {
+            svg.transition()
+                .duration(750)
+                .call(zoom.transform, d3.zoomIdentity);
+        });
+
+        // Filter controls
+        d3.select("#apply-filters").on("click", () => {
+            minPctDelayed = +d3.select("#pct-delayed").property("value");
+            minConnections = +d3.select("#num-connections").property("value");
+            updateAirports();
+        });
+
+        // Year filter control
+        d3.select("#year-select").on("change", function() {
+            currentYear = this.value;
+            loadData(currentYear).then(() => {
+                updateAirports();
+            });
+        });
+    }
 
 }).catch(error => {
     console.error("Error loading the data:", error);

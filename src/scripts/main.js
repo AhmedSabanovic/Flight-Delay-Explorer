@@ -47,6 +47,8 @@ Promise.all([
             DELAY_PERCENTAGE: +d.DELAY_PERCENTAGE,
             pct_delayed: +d.pct_delayed,
             ORIGIN: d.ORIGIN,
+            ORIGIN_CITY: d.ORIGIN_CITY, // Add origin city
+            AIRLINE: d.AIRLINE, // Add airline
             connections: parseConnections(d.connections)
         }));
     }
@@ -269,8 +271,11 @@ Promise.all([
                 const countStr = d.count > 1
                     ? `Cluster of ${d.count} airports<br>`
                     : `Airport: ${d.airports[0].ORIGIN}<br>`;
+                const airport = d.airports[0];
                 tooltip.html(`
                     <strong>${countStr}</strong>
+                    <strong>Origin City:</strong> ${airport.ORIGIN_CITY}<br>
+                    <strong>Airline:</strong> ${airport.AIRLINE}<br>
                     <strong>Avg Delayed%:</strong> ${d3.format(".1f")(d.pct_delayed)}%
                 `)
                 .style("left", (event.pageX + 10) + "px")
@@ -288,16 +293,17 @@ Promise.all([
                 }
             });
 
+        // In updateAirports() function, modify these lines:
         markersEnter.transition()
             .duration(500)
-            .attr("r", d => Math.max(3 / currentZoom, 3 + (d.count - 1)) );
+            .attr("r", d => Math.max(2 / currentZoom, Math.min(3 + (d.count - 1), 16 / currentZoom)));
 
         clusterMarkers.merge(markersEnter)
             .transition()
             .duration(300)
             .attr("cx", d => d.x)
             .attr("cy", d => d.y)
-            .attr("r", d => Math.max(3 / currentZoom, 3 + (d.count - 1)) )
+            .attr("r", d => Math.max(2 / currentZoom, Math.min(3 + (d.count - 1), 16 / currentZoom)))
             .attr("fill", d => colorScale(d.pct_delayed));
     }
 

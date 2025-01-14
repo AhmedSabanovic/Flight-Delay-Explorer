@@ -1,35 +1,81 @@
+// Cache and state management
+const dataCache = new Map();
+let loadingQueue = new Set();
+let visibleAirports = [];
+let currentViewport = null;
+
 Promise.all([
     d3.json("data/us-atlas.json")
 ]).then(function([us]) {
     let currentYear = 2020; 
     let airports = [];
 
-    // Initial load of data based on currentYear
-    loadData(currentYear).then(() => {
-        initializeVisualization();
-    });
+    // Enhanced loadData with caching
+    async function loadData(year) {
+        updateLoadingStatus(true);
+        
+        if (dataCache.has(year)) {
+            airports = dataCache.get(year);
+            updateLoadingStatus(false);
+            console.log(`Data for year ${year} loaded from cache.`);
+            return Promise.resolve();
+        }
 
-    // Function to load data based on year
-    function loadData(year) {
-        return d3.csv(`data/flights_${year}.csv`).then(function(data) {
-            airports = data.map(d => {
-                d.LATITUDE = +d.LATITUDE;
-                d.LONGITUDE = +d.LONGITUDE;
-                d.DELAY_PERCENTAGE = +d.DELAY_PERCENTAGE;
-                d.pct_delayed = +d.pct_delayed;
-
-                const connectionsStr = d.connections.replace(/'/g, '"').replace(/^"|"$/g, '');
-                try {
-                    d.connections = JSON.parse(connectionsStr);
-                } catch (e) {
-                    console.error(`Error parsing connections for airport ${d.ORIGIN}:`, e);
-                    d.connections = [];
-                }
-                return d;
-            });
-        }).catch(error => {
+        try {
+            const data = await d3.csv(`data/flights_${year}.csv`);
+            airports = processAirportData(data);
+            dataCache.set(year, airports);
+            
+            // Predictive loading of adjacent years
+            prefetchAdjacentYears(year);
+            
+            updateLoadingStatus(false);
+            updateCacheStatus();
+            console.log(`Data for year ${year} loaded and cached.`);
+            return Promise.resolve();
+        } catch (error) {
             console.error(`Error loading data for year ${year}:`, error);
-        });
+            updateLoadingStatus(false);
+            return Promise.reject(error);
+        }
+    }
+
+    function processAirportData(data) {
+        return data.map(d => ({
+            LATITUDE: +d.LATITUDE,
+            LONGITUDE: +d.LONGITUDE,
+            DELAY_PERCENTAGE: +d.DELAY_PERCENTAGE,
+            pct_delayed: +d.pct_delayed,
+            ORIGIN: d.ORIGIN,
+            connections: parseConnections(d.connections)
+        }));
+    }
+
+    function parseConnections(connectionsStr) {
+        try {
+            return JSON.parse(connectionsStr.replace(/'/g, '"').replace(/^"|"$/g, ''));
+        } catch (e) {
+            console.error('Error parsing connections:', e);
+            return [];
+        }
+    }
+
+    async function prefetchAdjacentYears(year) {
+        const adjacentYears = [year - 1, year + 1];
+        
+        for (const adjYear of adjacentYears) {
+            if (adjYear >= 2019 && adjYear <= 2022 && !dataCache.has(adjYear) && !loadingQueue.has(adjYear)) {
+                loadingQueue.add(adjYear);
+                try {
+                    const data = await d3.csv(`data/flights_${adjYear}.csv`);
+                    dataCache.set(adjYear, processAirportData(data));
+                    console.log(`Data for adjacent year ${adjYear} prefetched and cached.`);
+                } finally {
+                    loadingQueue.delete(adjYear);
+                }
+            }
+        }
+        updateCacheStatus();
     }
 
     const width = 960;
@@ -175,20 +221,32 @@ Promise.all([
     }
 
     function updateAirports() {
-        const validAirports = airports.filter(d => {
+        const [[x0, y0], [x1, y1]] = path.bounds(topojson.feature(us, us.objects.states));
+        currentViewport = {x0, y0, x1, y1};
+
+        const displayAirports = airports.filter(d => {
             const coords = projection([d.LONGITUDE, d.LATITUDE]);
-            return coords !== null && d.pct_delayed >= minPctDelayed && d.connections.length >= minConnections;
+            return coords && 
+                   coords[0] >= x0 && coords[0] <= x1 &&
+                   coords[1] >= y0 && coords[1] <= y1 &&
+                   d.pct_delayed >= minPctDelayed && 
+                   d.connections.length >= minConnections;
         });
 
-        const clusterRadius = currentZoom >= 6 ? 0 : 40 / currentZoom;
+        // Update display count
+        updateVisibleAirportsCount(displayAirports.length, displayAirports.length);
 
-        const clusters = clusterRadius > 0 ? clusterAirports(validAirports, clusterRadius) : validAirports.map(d => ({
-            x: projection([d.LONGITUDE, d.LATITUDE])[0],
-            y: projection([d.LONGITUDE, d.LATITUDE])[1],
-            airports: [d],
-            count: 1,
-            pct_delayed: d.pct_delayed
-        }));
+        // Existing clustering and rendering code
+        const clusterRadius = currentZoom >= 6 ? 0 : 40 / currentZoom;
+        const clusters = clusterRadius > 0 ? 
+            clusterAirports(displayAirports, clusterRadius) : 
+            displayAirports.map(d => ({
+                x: projection([d.LONGITUDE, d.LATITUDE])[0],
+                y: projection([d.LONGITUDE, d.LATITUDE])[1],
+                airports: [d],
+                count: 1,
+                pct_delayed: d.pct_delayed
+            }));
 
         const clusterMarkers = airportsGroup.selectAll("circle")
             .data(clusters, d => d.x + "_" + d.y);
@@ -326,6 +384,27 @@ Promise.all([
             });
         });
     }
+
+    // Status update functions
+    function updateLoadingStatus(isLoading) {
+        d3.select("#loading-indicator")
+            .style("display", isLoading ? "block" : "none");
+    }
+
+    function updateCacheStatus() {
+        d3.select("#cache-status")
+            .text(`Cached years: ${Array.from(dataCache.keys()).join(", ")}`);
+    }
+
+    function updateVisibleAirportsCount(displayed, total) {
+        d3.select("#visible-airports")
+            .text(`Showing ${displayed} of ${total} airports in view`);
+    }
+
+    // Initialize
+    loadData(currentYear).then(() => {
+        initializeVisualization();
+    });
 
 }).catch(error => {
     console.error("Error loading the data:", error);

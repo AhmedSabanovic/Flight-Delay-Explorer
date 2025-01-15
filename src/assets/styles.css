@@ -169,6 +169,60 @@ body {
     opacity: 0.8;
 }
 
+.histograms {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 100%;
+    gap: 30px;
+    margin: 20px 0;
+    padding: 0 10px;
+}
+
+.histogram-container {
+    background: rgba(255, 255, 255, 0.9);
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+    border-radius: 12px;
+    padding: 20px;
+    max-width: 600px;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    color: #00a0e5;
+    align-items: center;
+    gap: 10px;
+}
+
+/* Histogram Titles */
+.histogram-title {
+    font-size: 20px;
+    font-weight: bold;
+    color: #2c3e50;
+    margin: 0;
+    text-align: center;
+}
+
+/* Histogram SVG */
+.histogram-svg {
+    display: block;
+    width: 100%;
+    height: auto;
+    border: 1px solid #bdc3c7;
+    border-radius: 8px;
+    background: linear-gradient(135deg, #f7f9fc, #eef2f5);
+    padding: 5px;
+}
+
+.histogram-bar {
+    background-color: #00a0e5;
+    transition: background-color 0.3s ease;
+}
+
+.histogram-bar:hover {
+    background-color: #007a8c; 
+}
+
+
 /* States */
 .states path {
     fill: white;
@@ -332,3 +386,4 @@ button:focus {
         height: 400px;
     }
 }
+

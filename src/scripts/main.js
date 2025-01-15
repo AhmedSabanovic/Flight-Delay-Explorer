@@ -179,6 +179,50 @@ Promise.all([
 
     let debounceTimeout;
 
+    // Histogram Dimensions
+    const histogramWidth = 300;
+    const histogramHeight = 200;
+    const margin = { top: 20, right: 20, bottom: 30, left: 40 };
+
+    // Scales for histograms
+    const xScaleDelay = d3.scaleLinear().range([margin.left, histogramWidth - margin.right]);
+    const yScaleDelay = d3.scaleLinear().range([histogramHeight - margin.bottom, margin.top]);
+
+    const xScaleAvgDelay = d3.scaleLinear().range([margin.left, histogramWidth - margin.right]);
+    const yScaleAvgDelay = d3.scaleLinear().range([histogramHeight - margin.bottom, margin.top]);
+
+    // Axes
+    const xAxisDelay = d3.axisBottom(xScaleDelay).ticks(10);
+    const yAxisDelay = d3.axisLeft(yScaleDelay);
+
+    const xAxisAvgDelay = d3.axisBottom(xScaleAvgDelay).ticks(10);
+    const yAxisAvgDelay = d3.axisLeft(yScaleAvgDelay);
+
+    const delaySvg = d3.select("#histogram-delay")
+    .attr("class", "histogram-svg");
+
+    const avgDelaySvg = d3.select("#histogram-average-delay")
+    .attr("class", "histogram-svg");
+
+    delaySvg.append("g")
+    .attr("class", "x-axis") 
+    .attr("transform", `translate(0, ${histogramHeight - margin.bottom})`);
+
+    delaySvg.append("g")
+    .attr("class", "y-axis") 
+    .attr("transform", `translate(${margin.left}, 0)`);
+
+    avgDelaySvg.append("g")
+    .attr("class", "x-axis")
+    .attr("transform", `translate(0, ${histogramHeight - margin.bottom})`);
+
+    avgDelaySvg.append("g")
+    .attr("class", "y-axis")
+    .attr("transform", `translate(${margin.left}, 0)`);
+
+    
+
+
 
     function clusterAirports(data, projection) {
         const clusters = {}; // Group by state
@@ -307,6 +351,75 @@ Promise.all([
             requestAnimationFrame(() => updateAirports());
         }, 100);
     }
+
+    function updateHistograms(data) {
+        // Delay Percentage Histogram
+        const delayBins = d3.histogram()
+            .domain([0, 100])
+            .thresholds(10)
+            .value(d => d.pct_delayed)(data);
+    
+        xScaleDelay.domain([0, 100]);
+        yScaleDelay.domain([0, d3.max(delayBins, d => d.length)]);
+    
+        delaySvg.select(".x-axis").call(xAxisDelay);
+        delaySvg.select(".y-axis").call(yAxisDelay);
+    
+        const bars = delaySvg.selectAll(".bar")
+            .data(delayBins, d => d.x0);
+    
+        bars.exit()
+            .transition().duration(300)
+            .attr("height", 0)
+            .remove();
+    
+        const barsEnter = bars.enter().append("rect").attr("class", "bar")
+            .attr("x", d => xScaleDelay(d.x0) + 1)
+            .attr("width", d => Math.max(0, xScaleDelay(d.x1) - xScaleDelay(d.x0) - 1))
+            .attr("y", histogramHeight - margin.bottom)
+            .attr("height", 0);
+    
+        barsEnter.merge(bars)
+            .transition().duration(300)
+            .attr("x", d => xScaleDelay(d.x0) + 1)
+            .attr("width", d => Math.max(0, xScaleDelay(d.x1) - xScaleDelay(d.x0) - 1))
+            .attr("y", d => yScaleDelay(d.length))
+            .attr("height", d => histogramHeight - margin.bottom - yScaleDelay(d.length));
+    
+        // Average Delay Histogram
+        const avgDelayBins = d3.histogram()
+            .domain([0, 120])
+            .thresholds(10)
+            .value(d => d.avg_delay)(data);
+    
+        xScaleAvgDelay.domain([0, 120]);
+        yScaleAvgDelay.domain([0, d3.max(avgDelayBins, d => d.length)]);
+    
+        avgDelaySvg.select(".x-axis").call(xAxisAvgDelay);
+        avgDelaySvg.select(".y-axis").call(yAxisAvgDelay);
+    
+        const avgBars = avgDelaySvg.selectAll(".bar")
+            .data(avgDelayBins, d => d.x0);
+    
+        avgBars.exit()
+            .transition().duration(300)
+            .attr("height", 0)
+            .remove();
+    
+        const avgBarsEnter = avgBars.enter().append("rect").attr("class", "bar")
+            .attr("x", d => xScaleAvgDelay(d.x0) + 1)
+            .attr("width", d => Math.max(0, xScaleAvgDelay(d.x1) - xScaleAvgDelay(d.x0) - 1))
+            .attr("y", histogramHeight - margin.bottom)
+            .attr("height", 0);
+    
+        avgBarsEnter.merge(avgBars)
+            .transition().duration(300)
+            .attr("x", d => xScaleAvgDelay(d.x0) + 1)
+            .attr("width", d => Math.max(0, xScaleAvgDelay(d.x1) - xScaleAvgDelay(d.x0) - 1))
+            .attr("y", d => yScaleAvgDelay(d.length))
+            .attr("height", d => histogramHeight - margin.bottom - yScaleAvgDelay(d.length));
+    }
+    
     
 
     function updateAirports() {
@@ -348,6 +461,10 @@ Promise.all([
                     connections: d.connections,
                     city: d.ORIGIN_CITY
                 }));
+        
+        
+        
+        updateHistograms(displayAirports); 
 
 
         

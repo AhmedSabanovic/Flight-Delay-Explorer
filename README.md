@@ -49,9 +49,9 @@ An interactive visualization of flight delays across the United States, showcasi
 http://localhost:8000/src/index.html
 
 ## Controls
-Zoom In (+): Click to zoom into the map.
-Zoom Out (−): Click to zoom out of the map.
-Reset (⟲): Click to return to the default map view.
-Pan: Click and drag the map to navigate different regions.
-Filter Panel: Adjust filters to customize the displayed data based on year, delay percentage, and number of connections.
-Hover Tooltips: Hover over airport markers to view detailed information.
+- Zoom In (+): Click to zoom into the map.
+- Zoom Out (−): Click to zoom out of the map.
+- Reset (⟲): Click to return to the default map view.
+- Pan: Click and drag the map to navigate different regions.
+- Filter Panel: Adjust filters to customize the displayed data based on year, delay percentage, and number of connections.
+- Hover Tooltips: Hover over airport markers to view detailed information.

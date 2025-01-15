@@ -1,6 +1,10 @@
 # US Flight Delay Explorer
 
 An interactive visualization of flight delays across the United States, showcasing airport locations, delay percentages, and related statistics.
+## Dataset used
+
+**Flight Delay and Cancellation Dataset (2019-2023)**
+https://www.kaggle.com/datasets/patrickzel/flight-delay-and-cancellation-dataset-2019-2023/data?select=flights_sample_3m.csv
 
 ## Features
 - **Interactive Map:**

@@ -40,19 +40,6 @@ Promise.all([
         }
     }
 
-    function processAirportData(data) {
-        return data.map(d => ({
-            LATITUDE: +d.LATITUDE,
-            LONGITUDE: +d.LONGITUDE,
-            DELAY_PERCENTAGE: +d.DELAY_PERCENTAGE,
-            pct_delayed: +d.pct_delayed,
-            ORIGIN: d.ORIGIN,
-            ORIGIN_CITY: d.ORIGIN_CITY, // Add origin city
-            AIRLINE: d.AIRLINE, // Add airline
-            connections: parseConnections(d.connections)
-        }));
-    }
-
     function parseConnections(connectionsStr) {
         try {
             return JSON.parse(connectionsStr.replace(/'/g, '"').replace(/^"|"$/g, ''));
@@ -60,6 +47,31 @@ Promise.all([
             console.error('Error parsing connections:', e);
             return [];
         }
+    }
+
+    function processAirportData(data) {
+        return data.map(d => {
+            try {
+                return {
+                    LATITUDE: parseFloat(d.LATITUDE) || null,
+                    LONGITUDE: parseFloat(d.LONGITUDE) || null,
+                    DELAY_PERCENTAGE: parseFloat(d.DELAY_PERCENTAGE) || 0,
+                    pct_delayed: parseFloat(d.pct_delayed) || 0,
+                    flights: parseInt(d.flights) || 0,
+                    avg_delay: parseFloat(d.avg_delay) || 0,
+                    delayed: parseInt(d.delayed) || 0,
+                    ORIGIN: d.ORIGIN || "Unknown",
+                    ORIGIN_CITY: d.ORIGIN_CITY || "Unknown", // Ensure valid origin city
+                    AIRPORT: d.AIRPORT || "Unknown",
+                    AIRLINE: d.AIRLINE || "Unknown", // Ensure valid airline
+                    STATE: d.STATE || "Unknown", // Ensure valid state
+                    connections: parseConnections(d.connections || "[]"), // Handle missing connections gracefully
+                };
+            } catch (error) {
+                console.error("Error processing airport data:", d, error);
+                return null; // Skip this entry if it cannot be processed
+            }
+        }).filter(d => d !== null); // Remove invalid entries
     }
 
     async function prefetchAdjacentYears(year) {
@@ -167,50 +179,124 @@ Promise.all([
 
     let debounceTimeout;
 
-    function clusterAirports(data, clusterRadius) {
-        const clusters = [];
 
+    function clusterAirports(data, projection) {
+        const clusters = {}; // Group by state
+    
         data.forEach(airport => {
+            const state = airport.STATE;
             const coords = projection([airport.LONGITUDE, airport.LATITUDE]);
             if (!coords) return;
-            let foundCluster = null;
-
-            for (const c of clusters) {
-                const dx = coords[0] - c.x;
-                const dy = coords[1] - c.y;
-                if (Math.sqrt(dx * dx + dy * dy) <= clusterRadius) {
-                    foundCluster = c;
-                    break;
-                }
+    
+            // Check if a cluster already exists for this state
+            if (!clusters[state]) {
+                clusters[state] = {
+                    state: state,
+                    x: 0,
+                    y: 0,
+                    airports: new Set(), // Unique airports based on coordinates
+                    airlines: new Set(), // Unique airlines
+                    connections: new Set(), // Unique destinations
+                    total_delayed: 0, // Total delayed flights
+                    total_delay_minutes: 0, // Total delay in minutes
+                    total_flights: 0, // Total flights in the cluster
+                    pct_delayed: 0, // Percentage of delayed flights
+                    avg_delay: 0 // Average delay in minutes for delayed flights
+                };
             }
+    
+            const stateCluster = clusters[state];
 
-            if (foundCluster) {
-                foundCluster.airports.push(airport);
-                foundCluster.count++;
-                foundCluster.x = (foundCluster.x * (foundCluster.count - 1) + coords[0]) / foundCluster.count;
-                foundCluster.y = (foundCluster.y * (foundCluster.count - 1) + coords[1]) / foundCluster.count;
-            } else {
-                clusters.push({
-                    x: coords[0],
-                    y: coords[1],
-                    airports: [airport],
-                    count: 1
-                });
+            if (!stateCluster.sumX) {
+                stateCluster.sumX = 0;
+                stateCluster.sumY = 0;
             }
+    
+            // Track unique airports based on coordinates (LATITUDE, LONGITUDE)
+            const airportKey = `${airport.LATITUDE},${airport.LONGITUDE}`;
+            if (!stateCluster.airports.has(airportKey)) {
+                stateCluster.airports.add(airportKey);
+            
+                // Update the running sums of coordinates
+                stateCluster.sumX += coords[0];
+                stateCluster.sumY += coords[1];
+            
+                // Increment the count of unique airports
+                stateCluster.airportsCount = stateCluster.airports.size;
+            
+                // Calculate the new average position
+                stateCluster.x = stateCluster.sumX / stateCluster.airportsCount;
+                stateCluster.y = stateCluster.sumY / stateCluster.airportsCount;
+            }
+             // Track unique airlines
+        airport.AIRLINE.forEach(airl => stateCluster.airlines.add(airl));
+    
+            // Track unique destinations from the airport's connections
+            airport.connections.forEach(dest => stateCluster.connections.add(dest));
+    
+            // Update cluster totals
+            stateCluster.total_flights += airport.flights;
+            stateCluster.total_delayed += airport.delayed;
+            stateCluster.total_delay_minutes += airport.avg_delay * airport.delayed; // Avg delay is for delayed flights only
         });
-
-        return clusters.map(c => {
-            const avgPctDelayed = d3.mean(c.airports, d => d.pct_delayed);
+    
+        // Convert clusters object to array and compute final metrics
+        return Object.values(clusters).map(cluster => {
+            // Calculate average delay only for delayed flights
+            cluster.avg_delay = cluster.total_delayed > 0
+                ? cluster.total_delay_minutes / cluster.total_delayed
+                : 0;
+    
+            // Calculate percentage of delayed flights out of total flights
+            cluster.pct_delayed = cluster.total_flights > 0
+                ? (cluster.total_delayed / cluster.total_flights) * 100
+                : 0;
+    
             return {
-                x: c.x,
-                y: c.y,
-                airports: c.airports,
-                count: c.count,
-                pct_delayed: avgPctDelayed
+                code: cluster.state,
+                x: cluster.x,
+                y: cluster.y,
+                count: cluster.airports.size, // Number of unique airports in the cluster
+                total_flights: cluster.total_flights,
+                total_delayed: cluster.total_delayed,
+                avg_delay: cluster.avg_delay, // Average delay in minutes for delayed flights
+                pct_delayed: cluster.pct_delayed, // Percentage of delayed flights
+                airports: Array.from(cluster.airports), // Unique airports in the cluster
+                airlines: Array.from(cluster.airlines), // Unique airlines in the cluster
+                connections: Array.from(cluster.connections) // Unique destinations in the cluster
             };
         });
     }
 
+    function aggregateAirportData(airports) {
+
+        const aggregatedData = d3.groups(airports, d => d.ORIGIN) // Group by airport code
+            .map(([key, values]) => {
+                const totalFlights = d3.sum(values, d => d.flights);
+                const totalDelayed = d3.sum(values, d => d.delayed);
+    
+                return {
+                    AIRPORT: values[0].AIRPORT, // Use the airport name (same for all records in the group)
+                    LONGITUDE: values[0].LONGITUDE,
+                    ORIGIN_CITY: values[0].ORIGIN_CITY,
+                    code: values[0].ORIGIN,
+                    LATITUDE: values[0].LATITUDE,
+                    STATE: values[0].STATE,
+                    flights: totalFlights, // Sum the total flights
+                    delayed: totalDelayed, // Sum the delayed flights
+                    pct_delayed: totalFlights > 0 ? (totalDelayed / totalFlights) * 100 : 0, // Calculate percentage of delayed flights
+                    avg_delay: totalDelayed > 0 ? d3.sum(values, d => d.avg_delay * d.delayed) / totalDelayed : 0, // Average delay in minutes
+                    AIRLINE: [...new Set(values.flatMap(d => d.AIRLINE))], // Get unique airlines
+                    connections: [...new Set(values.flatMap(d => d.connections))], // Get unique destinations
+                };
+            });
+    
+        return aggregatedData; // Return the aggregated data
+    }
+    
+
+    
+    
     function zoomed(event) {
         clearTimeout(debounceTimeout);
         debounceTimeout = setTimeout(() => {
@@ -221,12 +307,14 @@ Promise.all([
             requestAnimationFrame(() => updateAirports());
         }, 100);
     }
+    
 
     function updateAirports() {
         const [[x0, y0], [x1, y1]] = path.bounds(topojson.feature(us, us.objects.states));
         currentViewport = {x0, y0, x1, y1};
 
-        const displayAirports = airports.filter(d => {
+        const filteredAirports = airports.filter(d => {
+            // Filter by visible area in the viewport
             const coords = projection([d.LONGITUDE, d.LATITUDE]);
             return coords && 
                    coords[0] >= x0 && coords[0] <= x1 &&
@@ -234,24 +322,39 @@ Promise.all([
                    d.pct_delayed >= minPctDelayed && 
                    d.connections.length >= minConnections;
         });
+    
+        // Perform aggregation on the filtered data
+        const displayAirports = aggregateAirportData(filteredAirports);
+
 
         // Update display count
         updateVisibleAirportsCount(displayAirports.length, displayAirports.length);
 
-        // Existing clustering and rendering code
-        const clusterRadius = currentZoom >= 6 ? 0 : 40 / currentZoom;
-        const clusters = clusterRadius > 0 ? 
-            clusterAirports(displayAirports, clusterRadius) : 
-            displayAirports.map(d => ({
-                x: projection([d.LONGITUDE, d.LATITUDE])[0],
-                y: projection([d.LONGITUDE, d.LATITUDE])[1],
-                airports: [d],
-                count: 1,
-                pct_delayed: d.pct_delayed
-            }));
+            // Existing clustering and rendering code
+            const clusterRadius = currentZoom >= 2 ? 0 : 40 / currentZoom;
+            const clusters = clusterRadius > 0 ? 
+                clusterAirports(displayAirports, projection):
+                displayAirports.map(d => ({
+                    code: d.code,
+                    x: projection([d.LONGITUDE, d.LATITUDE])[0],
+                    y: projection([d.LONGITUDE, d.LATITUDE])[1],
+                    count: 1,
+                    airport: d.AIRPORT,
+                    flights: d.flights,
+                    delayed: d.delayed,
+                    avg_delay: d.avg_delay,
+                    pct_delayed: d.pct_delayed,
+                    airline: d.AIRLINE,
+                    connections: d.connections,
+                    city: d.ORIGIN_CITY
+                }));
 
+
+        
+        console.log(clusters); // Log the clusters data to the console
+                
         const clusterMarkers = airportsGroup.selectAll("circle")
-            .data(clusters, d => d.x + "_" + d.y);
+            .data(clusters, d => d.code);
 
         clusterMarkers.exit()
             .transition()
@@ -259,39 +362,73 @@ Promise.all([
             .attr("r", 0)
             .remove();
 
+
         const markersEnter = clusterMarkers.enter()
-            .append("circle")
-            .attr("class", "airport")
-            .attr("r", 0)
-            .attr("cx", d => d.x)
-            .attr("cy", d => d.y)
-            .attr("fill", d => colorScale(d.pct_delayed))
-            .on("mouseover", function(event, d) {
-                tooltip.transition().duration(200).style("opacity", .9);
-                const countStr = d.count > 1
-                    ? `Cluster of ${d.count} airports<br>`
-                    : `Airport: ${d.airports[0].ORIGIN}<br>`;
-                const airport = d.airports[0];
-                tooltip.html(`
-                    <strong>${countStr}</strong>
-                    <strong>Origin City:</strong> ${airport.ORIGIN_CITY}<br>
-                    <strong>Airline:</strong> ${airport.AIRLINE}<br>
-                    <strong>Avg Delayed%:</strong> ${d3.format(".1f")(d.pct_delayed)}%
-                `)
-                .style("left", (event.pageX + 10) + "px")
-                .style("top", (event.pageY - 28) + "px");
-            })
-            .on("mouseout", function() {
-                tooltip.transition().duration(500).style("opacity", 0);
-            })
-            .on("click", function(event, d) {
-                if (d.count > 1) {
-                    console.log(`Clicked on cluster with ${d.count} airports:`, d.airports.map(a => a.ORIGIN));
-                } else {
-                    console.log(`Clicked on single airport: ${d.airports[0].ORIGIN}`);
-                    toggleConnections(d.airports[0]);
-                }
-            });
+        .append("circle")
+        .attr("class", "airport")
+        .attr("r", 0)
+        .attr("cx", d => d.x)
+        .attr("cy", d => d.y)
+        .attr("fill", d => colorScale(d.pct_delayed))
+        .on("mouseover", function(event, d) {
+            tooltip.transition().duration(200).style("opacity", .9);
+
+            let tooltipHtml = "";
+            if (d.count != 1) {
+                // Clustered airports: Show info about the cluster
+                tooltipHtml = `
+                <div style="font-family: Arial, sans-serif; line-height: 1.4; color: #333;">
+                    <div style="font-size: 14px; font-weight: bold; margin-bottom: 8px;">
+                        Cluster of ${d.count} airports
+                    </div>
+                    <div style="font-size: 12px;">
+                        <strong>State:</strong> ${d.code}<br>
+                        <strong>Total Flights:</strong> ${d.total_flights}<br>
+                        <strong>Total Delayed Flights:</strong> ${d.total_delayed}<br>
+                        <strong>% of Flights Delayed:</strong> ${d3.format(".1f")(d.pct_delayed)}%<br>
+                        <strong>Average Delay (minutes):</strong> ${d3.format(".1f")(d.avg_delay)} min<br>
+                        <strong>Unique Airlines:</strong> ${d.airlines.length}<br>
+                        <strong>Unique Destinations:</strong> ${d.connections.length}<br>
+                    </div>
+                </div>
+            `;
+        } else {
+            // Single airport: Show info about the individual airport
+            tooltipHtml = `
+                <div style="font-family: Arial, sans-serif; line-height: 1.4; color: #333;">
+                    <div style="font-size: 14px; font-weight: bold; margin-bottom: 8px;">
+                        ${d.airport} (${d.code})
+                    </div>
+                    <div style="font-size: 12px;">
+                        <strong>City:</strong> ${d.city}<br>
+                        <strong>Total Flights:</strong> ${d.flights}<br>
+                        <strong>Total Delayed Flights:</strong> ${d.delayed}<br>
+                        <strong>% of Flights Delayed:</strong> ${d3.format(".1f")(d.pct_delayed)}%<br>
+                        <strong>Average Delay (minutes):</strong> ${d3.format(".1f")(d.avg_delay)} min<br>
+                        <strong>Unique Airlines:</strong> ${d.airline.length}<br>
+                        <strong>Unique Destinations:</strong> ${d.connections.length}<br>
+                    </div>
+                </div>
+            `;
+        }
+
+        tooltip.html(tooltipHtml)
+            .style("left", (event.pageX + 10) + "px")
+            .style("top", (event.pageY - 28) + "px");
+    })
+    .on("mouseout", function() {
+        tooltip.transition().duration(500).style("opacity", 0);
+    })
+    .on("click", function(event, d) {
+        if (d.count > 1) {
+            console.log(`Clicked on cluster with ${d.count} airports:`, d.airports.map(a => a.code));
+        } else {
+            console.log(`Clicked on single airport: ${d.code}`);
+            toggleConnections(d);
+        }
+    });
+
+
 
         // In updateAirports() function, modify these lines:
         markersEnter.transition()
@@ -305,55 +442,71 @@ Promise.all([
             .attr("cy", d => d.y)
             .attr("r", d => Math.max(2 / currentZoom, Math.min(3 + (d.count - 1), 16 / currentZoom)))
             .attr("fill", d => colorScale(d.pct_delayed));
-    }
+     }
 
-    function toggleConnections(selectedAirport) {
-        console.log(`Toggling connections for airport: ${selectedAirport.ORIGIN}`);
+     function toggleConnections(selectedAirport) {
+        console.log(`Toggling connections for airport: ${selectedAirport.code}`);
         console.log(`Connections: ${selectedAirport.connections}`);
-
+    
+        // Select existing connections for the current airport
         const existingConnections = connectionsGroup.selectAll("path.connection")
             .filter(function() {
-                return d3.select(this).attr("origin") === selectedAirport.ORIGIN;
+                return d3.select(this).attr("origin") === selectedAirport.code;
             });
-
+    
+        // If connections already exist, remove them
         if (!existingConnections.empty()) {
             existingConnections.transition()
                 .duration(500)
                 .attr("stroke-width", 0)
                 .style("opacity", 0)
                 .remove();
-            console.log(`Removed connections for airport: ${selectedAirport.ORIGIN}`);
+            console.log(`Removed connections for airport: ${selectedAirport.code}`);
             return;
         }
+    
+        // Perform aggregation on the filtered data
+        const AGGairports = aggregateAirportData(airports);
 
-        selectedAirport.connections.forEach(dest => {
-            const destAirport = airports.find(a => a.ORIGIN === dest.trim());
+        console.log(AGGairports)
+
+
+        // Draw new connections
+        selectedAirport.connections.forEach(destCode => {
+            // Find destination airport in the clustered/aggregated data
+            const destAirport = AGGairports.find(a => a.code === destCode);
+            
             if (destAirport) {
-                const originCoords = projection([selectedAirport.LONGITUDE, selectedAirport.LATITUDE]);
+                // Calculate coordinates for the origin and destination airports
+                const originCoords = [selectedAirport.x, selectedAirport.y]
                 const destCoords = projection([destAirport.LONGITUDE, destAirport.LATITUDE]);
+
+                
+                
                 if (originCoords && destCoords) {
                     connectionsGroup.append("path")
                         .attr("class", "connection")
                         .attr("d", `M${originCoords[0]},${originCoords[1]}
-                                    L${originCoords[0]},${originCoords[1]}`)
+                                    L${originCoords[0]},${originCoords[1]}`) // Start as a point
                         .attr("stroke", "orange")
                         .attr("stroke-width", 2)
                         .attr("fill", "none")
-                        .attr("origin", selectedAirport.ORIGIN)
-                        .attr("destination", destAirport.ORIGIN)
+                        .attr("origin", selectedAirport.code)
+                        .attr("destination", destAirport.code)
                         .transition()
                         .duration(1000)
                         .attr("d", `M${originCoords[0]},${originCoords[1]}
-                                    L${destCoords[0]},${destCoords[1]}`)
+                                    L${destCoords[0]},${destCoords[1]}`) // Animate to a line
                         .style("opacity", 0.8);
                 } else {
-                    console.warn(`Invalid coordinates for connection from ${selectedAirport.ORIGIN} to ${destAirport.ORIGIN}`);
+                    console.warn(`Invalid coordinates for connection from ${selectedAirport.code} to ${destAirport.code}`);
                 }
             } else {
-                console.warn(`Destination airport not found for code: ${dest}`);
+                console.warn(`Destination airport not found for code: ${destCode}`);
             }
         });
     }
+    
 
     function initializeVisualization() {
         updateAirports();

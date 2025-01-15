@@ -1,17 +1,35 @@
-# US Airports Visualization
+# US Flight Delay Explorer
 
-An interactive visualization of airports across the United States, showing airport locations and delay percentages.
+An interactive visualization of flight delays across the United States, showcasing airport locations, delay percentages, and related statistics.
 
 ## Features
-- Interactive map with pan and zoom functionality
-- Airport markers sized based on zoom level
-- Clustering of airports at lower zoom levels
-- Color coding based on delay percentages
-- Easy-to-use zoom controls
+- **Interactive Map:**
+  - Pan and zoom functionality with smooth transitions.
+  - Responsive design ensuring optimal display across devices.
+- **Airport Visualization:**
+  - Markers sized dynamically based on zoom level.
+  - Clustering of airports at lower zoom levels to enhance clarity.
+  - Color-coded markers representing delay percentages.
+- **Filter Options:**
+  - Select year to view data from 2019 to 2022.
+  - Set minimum percentage of delayed flights.
+  - Specify minimum number of connections.
+- **Histograms:**
+  - **Percentage of Delayed Flights:** Visual representation of delayed flight percentages.
+  - **Average Delay (Minutes):** Displays the average delay time in minutes.
+- **Tooltips:**
+  - Hover over markers to view detailed information about individual airports or clusters.
+- **Zoom Controls:**
+  - Buttons to easily zoom in, zoom out, and reset to the default view.
+- **Legend:**
+  - Clear legend indicating the color scale for delay percentages.
+- **Performance Enhancements:**
+  - Data caching for faster load times and smoother interactions.
+  - Predictive loading of adjacent years to minimize wait times.
 
 ## Prerequisites
-- Web browser with JavaScript enabled
-- Local web server (to avoid CORS issues with local files)
+- **Web Browser:** Modern browser with JavaScript enabled.
+- **Local Web Server:** Required to run the application locally and avoid CORS issues.
 
 ## Running the Application
 
@@ -27,7 +45,9 @@ An interactive visualization of airports across the United States, showing airpo
 http://localhost:8000/src/index.html
 
 ## Controls
-Click + to zoom in
-Click - to zoom out
-Click Reset to return to default view
-Click and drag to pan across the map
+Zoom In (+): Click to zoom into the map.
+Zoom Out (−): Click to zoom out of the map.
+Reset (⟲): Click to return to the default map view.
+Pan: Click and drag the map to navigate different regions.
+Filter Panel: Adjust filters to customize the displayed data based on year, delay percentage, and number of connections.
+Hover Tooltips: Hover over airport markers to view detailed information.

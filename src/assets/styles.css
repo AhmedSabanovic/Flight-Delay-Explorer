@@ -180,15 +180,17 @@ body {
 .histogram-container {
     background: rgba(255, 255, 255, 0.9);
     box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
-    border-radius: 12px;
-    padding: 20px;
+    border-radius: 10px;
+    padding: 14px;
     max-width: 600px;
-    width: 100%;
+    width: 90%;
     display: flex;
     flex-direction: column;
     color: #00a0e5;
     align-items: center;
     gap: 10px;
+    margin-top: 10px;
+    margin-right: 10px;
 }
 
 /* Histogram Titles */
